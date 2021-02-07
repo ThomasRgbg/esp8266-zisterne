@@ -1,7 +1,8 @@
-from machine import Pin, I2C, reset, RTC
+from machine import Pin, I2C, reset, RTC, unique_id
 import time
 import ntptime
 
+from ubinascii import hexlify
 from umqtt.robust import MQTTClient
 
 from tfluna_i2c import Luna 
@@ -22,20 +23,27 @@ class Pumpe:
         return self.pin.value()
 
 class SensorClient:
-    def __init__(self, sensor, client_id, server):
-        self.sensor = sensor
-        self.client = MQTTClient(client_id, server)
-        self.name = 'pentling'
-        self.client.connect()
+    def __init__(self, client_id, server):
+        self.mqtt = MQTTClient(client_id, server)
+        self.name = b'pentling/zisterne'
+        self.mqtt.connect()
 
-    def publish_distance(self, dist):
-        # dist = self.sensor.read_avg_dist()
-        self.client.publish(self.name + '/zisterne/distance', str(dist))
+    def publish_generic(self, name, value):
+        print("Sending {0} = {1}".format(name, value))
+        self.mqtt.publish(self.name + b'/' + bytes(name, 'ascii'), str(value))
 
-    def publish_pump(self, state):
-        # dist = self.sensor.read_avg_dist()
-        self.client.publish(self.name + '/zisterne/pump', str(state))
+def connect_mqtt():
+    print("try to connect to MQTT server")
+    try:
+        sc_try = SensorClient(hexlify(unique_id()), '192.168.0.13')
+    except OSError:
+        print("OSError - Could not connect to MQTT server")
+        sc_try = None
 
+    time.sleep(5)  # Some delay to avoid system getting blocked in a endless loop in case of 
+                   # connection problems, unstable wifi etc. 
+    
+    return sc_try
 
 def updatetime(force):
     if (rtc.datetime()[0] < 2020) or (force is True):
@@ -48,14 +56,6 @@ def updatetime(force):
     else:
         print("RTC time looks already reasonable: {0}".format(rtc.datetime()))
 
-def connect_mqtt():
-    print("try to connect to MQTT server")
-    try:  
-        sc_try = SensorClient(lidar, '53242d8c-2ffa-4a92-b684-3da73483cd47', '192.168.0.13')
-    except:
-        sc_try = None
-    
-    return sc_try
 
 
 #### 
@@ -128,11 +128,12 @@ def mainloop():
 
         if sc is not None:
             print("send to MQTT server")
-            sc.publish_distance(dist)
-            sc.publish_pump(pumpe.state())
+            sc.publish_generic('distance', dist)
+            sc.publish_generic('pump', pumpe.state())
         else:
             print("MQTT not connected")
             sc = connect_mqtt()
+            continue
 
         # Get more data to MQTT to see whats ongoing if the pump is running
         if (pumpe.state() == 1):
