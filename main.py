@@ -75,11 +75,15 @@ lowerthresh = 95.0
 # time to connect WLAN, since marginal reception
 time.sleep(5)
 
-pumpe = Pumpe()
-lidar = Luna()
-rtc = RTC()
-logfile = open('logfile.txt', 'w')
 
+pumpe = Pumpe()
+
+i2c = I2C(scl=Pin(4), sda=Pin(2), freq=100000)
+lidar = Luna(i2c)
+
+rtc = RTC()
+
+logfile = open('logfile.txt', 'w')
 
 def mainloop():
     count=1

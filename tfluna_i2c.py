@@ -1,10 +1,8 @@
-from machine import Pin, I2C, reset, RTC
 import time
  
 class Luna:
-    def __init__(self):
-        # Hardcoded values, since simple device
-        self.i2c = I2C(scl=Pin(4), sda=Pin(2), freq=100000)
+    def __init__(self, i2c):
+        self.i2c = i2c
         self.addr = 0x10
         self.reset_sensor()
 
