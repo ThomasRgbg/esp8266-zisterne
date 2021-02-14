@@ -14,23 +14,51 @@ class Pumpe:
         self.pin.value(0)
 
     def on(self):
+        print("Set GPIO on")
         self.pin.value(1)
 
     def off(self):
+        print("Set GPIO off")
         self.pin.value(0)
 
+    @property
     def state(self):
         return self.pin.value()
+
+    @state.setter
+    def state(self, value):
+        print("Setting pump to {0}".format(value))
+        if int(value) == 1:
+            self.on()
+        else:
+            self.off()
+
+    def set_state(self, value):
+        self.state = int(value)
 
 class SensorClient:
     def __init__(self, client_id, server):
         self.mqtt = MQTTClient(client_id, server)
         self.name = b'pentling/zisterne'
         self.mqtt.connect()
+        self.mqtt.set_callback(self.handle_mqtt_msgs)
+        self.actions = {}
 
     def publish_generic(self, name, value):
-        print("Sending {0} = {1}".format(name, value))
+        print("Publish {0} = {1}".format(name, value))
         self.mqtt.publish(self.name + b'/' + bytes(name, 'ascii'), str(value))
+
+    def handle_mqtt_msgs(self, topic, msg):
+        print("Received MQTT message: {0}:{1}".format(topic,msg))
+        if topic in self.actions:
+            print("Found registered function {0}".format(self.actions[topic]))
+            self.actions[topic](msg)
+
+    def register_action(self, topicname, cbfunction):
+        topic = self.name + b'/' + bytes(topicname, 'ascii')
+        print("Register topic {0} for {1}".format(topic, cbfunction))
+        self.mqtt.subscribe(topic)
+        self.actions[topic] = cbfunction
 
 def connect_mqtt():
     print("try to connect to MQTT server")
@@ -88,6 +116,8 @@ logfile = open('logfile.txt', 'w')
 def mainloop():
     count=1
     sc = connect_mqtt()
+    sc.register_action('pump_enable', pumpe.set_state)
+
     while True:
         dist = lidar.read_avg_dist()
         amp = lidar.read_amp()
@@ -99,7 +129,7 @@ def mainloop():
         print("Error Value: {0}".format(errorv))
         print("Temperature: {0}".format(temp))
         print("Timestamp: {0}".format(timestamp))
-        print("Pumpe: {0}".format(pumpe.state()))
+        print("Pumpe: {0}".format(pumpe.state))
         print("Count: {0}".format(count))
 
         if dist > lowerthresh:
@@ -114,14 +144,14 @@ def mainloop():
             print("lowerthresh {0} < Dist: {1} < upperthresh {2} -> don't change anything".format(lowerthresh,dist,upperthresh))
 
         # On device logging for debugging
-        if (logfile and (count % 10 == 1)) or (pumpe.state() == 1):
+        if (logfile and (count % 10 == 1)) or (pumpe.state == 1):
             updatetime(False)
             print("Write logfile")
-            logfile.write("{0}, ({1}),({2})\n".format(timestamp, dist,pumpe.state()))
+            logfile.write("{0}, ({1}),({2})\n".format(timestamp, dist,pumpe.state))
             logfile.flush()
 
         # After some days, the TF Luna gets stuck with just one value
-        if (count % 100 == 1):
+        if (count % 100 == 0):
             print("periodic reset of Lidar")
             lidar.reset_sensor()
             updatetime(True) 
@@ -129,17 +159,19 @@ def mainloop():
         if sc is not None:
             print("send to MQTT server")
             sc.publish_generic('distance', dist)
-            sc.publish_generic('pump', pumpe.state())
+            sc.publish_generic('pump', pumpe.state)
+            sc.mqtt.check_msg()
         else:
             print("MQTT not connected")
             sc = connect_mqtt()
+            sc.register_action('pump_enable', pumpe.set_state)
             continue
 
         # Get more data to MQTT to see whats ongoing if the pump is running
-        if (pumpe.state() == 1):
+        if (pumpe.state == 1):
             time.sleep(10)
         else:
-            time.sleep(110) 
+            time.sleep(30) #was 110 
 
         count += 1
 
