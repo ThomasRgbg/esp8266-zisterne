@@ -134,7 +134,8 @@ rtc = RTC()
 logfile = open('logfile.txt', 'w')
 
 def mainloop():
-    count=1
+    count = 1
+    errcount = 0
 
     while True:
         dist = lidar.read_avg_dist()
@@ -162,16 +163,18 @@ def mainloop():
             print("lowerthresh {0} < Dist: {1} < upperthresh {2} -> don't change anything".format(lowerthresh,dist,upperthresh))
 
         # On device logging for debugging
-        if (logfile and (count % 10 == 1)) or (pumpe.state == 1):
+        if (logfile and (count % 10 == 0)) or (pumpe.state == 1):
             updatetime(False)
             print("Write logfile")
             logfile.write("{0}, ({1}),({2})\n".format(timestamp, dist,pumpe.state))
             logfile.flush()
-
-        # After some days, the TF Luna gets stuck with just one value
+        
+        # After some hours, reallign things
         if (count % 100 == 0):
+            # After some days, the TF Luna gets stuck with just one value
             print("periodic reset of Lidar")
             lidar.reset_sensor()
+            # Force time sync to avoid to large drift
             updatetime(True) 
 
         if sc.isconnected():
@@ -182,13 +185,18 @@ def mainloop():
         else:
             print("MQTT not connected")
             sc.connect()
+            errcount += 1
             continue
 
         # Get more data to MQTT to see whats ongoing if the pump is running
         if (pumpe.state == 1):
             time.sleep(10)
         else:
-            time.sleep(110) #was 110 
+            time.sleep(110)
+
+        # Too many errors, e.g. could not connect to MQTT
+        if errcount > 20:
+            reset()
 
         count += 1
 
