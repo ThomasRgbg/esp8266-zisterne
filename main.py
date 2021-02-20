@@ -40,9 +40,39 @@ class SensorClient:
     def __init__(self, client_id, server):
         self.mqtt = MQTTClient(client_id, server)
         self.name = b'pentling/zisterne'
-        self.mqtt.connect()
+        self.connect()
         self.mqtt.set_callback(self.handle_mqtt_msgs)
         self.actions = {}
+
+    def connect(self):
+        if self.isconnected():
+            self.mqtt.disconnect()
+        try:
+            self.mqtt.connect()
+        except OSError:
+            print("MQTT could not connect")
+            return False
+                
+        time.sleep(3)
+        if self.isconnected():
+            return True
+        else:
+            # Some delay to avoid system getting blocked in a endless loop in case of 
+            # connection problems, unstable wifi etc.
+            time.sleep(5)
+            return False
+        
+    def isconnected(self):
+        try:
+            self.mqtt.ping()
+        except OSError:
+            print("MQTT not connected - Ping not successfull")
+            return False
+        except AttributeError:
+            print("MQTT not connected - Ping not available")
+            return False
+        
+        return True
 
     def publish_generic(self, name, value):
         print("Publish {0} = {1}".format(name, value))
@@ -59,19 +89,6 @@ class SensorClient:
         print("Register topic {0} for {1}".format(topic, cbfunction))
         self.mqtt.subscribe(topic)
         self.actions[topic] = cbfunction
-
-def connect_mqtt():
-    print("try to connect to MQTT server")
-    try:
-        sc_try = SensorClient(hexlify(unique_id()), '192.168.0.13')
-    except OSError:
-        print("OSError - Could not connect to MQTT server")
-        sc_try = None
-
-    time.sleep(5)  # Some delay to avoid system getting blocked in a endless loop in case of 
-                   # connection problems, unstable wifi etc. 
-    
-    return sc_try
 
 def updatetime(force):
     if (rtc.datetime()[0] < 2020) or (force is True):
@@ -109,14 +126,15 @@ pumpe = Pumpe()
 i2c = I2C(scl=Pin(4), sda=Pin(2), freq=100000)
 lidar = Luna(i2c)
 
+sc = SensorClient(hexlify(unique_id()), '192.168.0.13')
+sc.register_action('pump_enable', pumpe.set_state)
+
 rtc = RTC()
 
 logfile = open('logfile.txt', 'w')
 
 def mainloop():
     count=1
-    sc = connect_mqtt()
-    sc.register_action('pump_enable', pumpe.set_state)
 
     while True:
         dist = lidar.read_avg_dist()
@@ -156,22 +174,21 @@ def mainloop():
             lidar.reset_sensor()
             updatetime(True) 
 
-        if sc is not None:
+        if sc.isconnected():
             print("send to MQTT server")
             sc.publish_generic('distance', dist)
             sc.publish_generic('pump', pumpe.state)
             sc.mqtt.check_msg()
         else:
             print("MQTT not connected")
-            sc = connect_mqtt()
-            sc.register_action('pump_enable', pumpe.set_state)
+            sc.connect()
             continue
 
         # Get more data to MQTT to see whats ongoing if the pump is running
         if (pumpe.state == 1):
             time.sleep(10)
         else:
-            time.sleep(30) #was 110 
+            time.sleep(110) #was 110 
 
         count += 1
 
