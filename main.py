@@ -40,9 +40,9 @@ class SensorClient:
     def __init__(self, client_id, server):
         self.mqtt = MQTTClient(client_id, server)
         self.name = b'pentling/zisterne'
+        self.actions = {}
         self.connect()
         self.mqtt.set_callback(self.handle_mqtt_msgs)
-        self.actions = {}
 
     def connect(self):
         if self.isconnected():
@@ -55,6 +55,7 @@ class SensorClient:
                 
         time.sleep(3)
         if self.isconnected():
+            self.resubscribe_all()
             return True
         else:
             # Some delay to avoid system getting blocked in a endless loop in case of 
@@ -89,6 +90,11 @@ class SensorClient:
         print("Register topic {0} for {1}".format(topic, cbfunction))
         self.mqtt.subscribe(topic)
         self.actions[topic] = cbfunction
+        
+    def resubscribe_all(self):
+        for topic in self.actions:
+            self.mqtt.subscribe(topic)
+            
 
 def updatetime(force):
     if (rtc.datetime()[0] < 2020) or (force is True):
@@ -179,18 +185,18 @@ def mainloop():
 
         if sc.isconnected():
             print("send to MQTT server")
+            sc.mqtt.check_msg()
             sc.publish_generic('distance', dist)
             sc.publish_generic('pump', pumpe.state)
-            sc.mqtt.check_msg()
         else:
-            print("MQTT not connected")
+            print("MQTT not connected - try to reconnect")
             sc.connect()
             errcount += 1
             continue
 
         # Get more data to MQTT to see whats ongoing if the pump is running
         if (pumpe.state == 1):
-            time.sleep(10)
+            time.sleep(2)
         else:
             time.sleep(110)
 
