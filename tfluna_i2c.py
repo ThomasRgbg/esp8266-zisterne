@@ -18,12 +18,15 @@ class Luna:
 
     def read_avg_dist(self):
         dist = 0
-        for i in range(40):
+        j = 0
+        for i in range(20):
             val = self.read_distance()
-            # print(val)
-            dist += val
+            print(val)
+            if val > 0:
+                dist += val
+                j += 1
             time.sleep(0.25)
-        dist = dist / 40
+        dist = dist / j
         return dist
 
     def read_amp(self):
@@ -38,18 +41,24 @@ class Luna:
         val = self.i2c.readfrom_mem(self.addr, 0x04, 2)
         return(int.from_bytes(val, 'little'))
 
-    #def enable_sensor():
-    #    self.i2c.writeto_mem(self.addr, 0x28, b'\x00')
+    def high_power(self, power):
+        if power:
+            self.i2c.writeto_mem(self.addr, 0x28, b'\x00')
+        else:
+            self.i2c.writeto_mem(self.addr, 0x28, b'\x01')
 
     def reset_sensor(self):
         self.i2c.writeto_mem(self.addr, 0x21, b'\x02')
         time.sleep(5)
         self.i2c.writeto_mem(self.addr, 0x26, b'\x02')
+        self.i2c.writeto_mem(self.addr, 0x28, b'\x01')
 
     def print_loop(self):
         while True:
             print("----")
+            self.high_power(True)
             print(self.read_distance())
             print(self.read_amp())
             print(self.read_temp())
-            time.sleep(2)
+            self.high_power(False)
+            time.sleep(5)
