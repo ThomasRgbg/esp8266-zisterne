@@ -1,4 +1,4 @@
-from machine import Pin, I2C, reset, RTC, unique_id
+from machine import Pin, I2C, reset, RTC, unique_id, Timer
 import time
 import ntptime
 
@@ -14,7 +14,8 @@ class Pumpe:
 
     def on(self):
         print("Set GPIO on")
-        self.pin.value(1)
+        # self.pin.value(1)
+        self.pin.value(0)
 
     def off(self):
         print("Set GPIO off")
@@ -34,6 +35,24 @@ class Pumpe:
 
     def set_state(self, value):
         self.state = int(value)
+        
+class Watchdog:
+    def __init__(self, interval):
+        self.timer = Timer(0)
+        self.timer.init(period=(interval*1000), mode=Timer.PERIODIC, callback=self.wdtcheck)
+        self.feeded = True
+        
+    def wdtcheck(self, timer):
+        if self.feeded:
+            print("Watchdog feeded, all fine")
+            self.feeded = False
+        else:
+            print("Watchdog hungry, lets do a reset in 5 sec")
+            time.sleep(5)
+            reset()
+            
+    def feed(self):
+        self.feeded = True
 
 def updatetime(force):
     if (rtc.datetime()[0] < 2020) or (force is True):
@@ -73,6 +92,9 @@ sc = MQTTHandler(b'pentling/zisterne', '192.168.0.13')
 sc.register_action('pump_enable', pumpe.set_state)
 
 rtc = RTC()
+wdt = Watchdog(interval = 180)
+wdt.feed()
+
 
 logfile = open('logfile.txt', 'w')
 
@@ -140,6 +162,8 @@ def mainloop():
         # Too many errors, e.g. could not connect to MQTT
         if errcount > 20:
             reset()
+
+        wdt.feed()
 
         count += 1
 
