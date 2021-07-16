@@ -14,8 +14,7 @@ class Pumpe:
 
     def on(self):
         print("Set GPIO on")
-        # self.pin.value(1)
-        self.pin.value(0)
+        self.pin.value(1)
 
     def off(self):
         print("Set GPIO off")
@@ -53,6 +52,7 @@ class Watchdog:
             
     def feed(self):
         self.feeded = True
+        print("Feed Watchdog")
 
 def updatetime(force):
     if (rtc.datetime()[0] < 2020) or (force is True):
@@ -73,7 +73,7 @@ def updatetime(force):
 upperthresh = 80.0
 
 # Pump off:
-lowerthresh = 95.0 # was 95.0
+lowerthresh = 87.0
 
 ####
 # Main
@@ -81,7 +81,6 @@ lowerthresh = 95.0 # was 95.0
 
 # time to connect WLAN, since marginal reception
 time.sleep(5)
-
 
 pumpe = Pumpe()
 
@@ -92,9 +91,8 @@ sc = MQTTHandler(b'pentling/zisterne', '192.168.0.13')
 sc.register_action('pump_enable', pumpe.set_state)
 
 rtc = RTC()
-wdt = Watchdog(interval = 180)
+wdt = Watchdog(interval = 120)
 wdt.feed()
-
 
 logfile = open('logfile.txt', 'w')
 
@@ -153,17 +151,21 @@ def mainloop():
             errcount += 1
             continue
 
+        wdt.feed()
+
         # Get more data to MQTT to see whats ongoing if the pump is running
         if (pumpe.state == 1):
             time.sleep(2)
+        # Close to pump enable point, be carefull
+        elif dist < lowerthresh:
+            time.sleep(20)
+        # All good, lets take it slow. 
         else:
-            time.sleep(110)
+            time.sleep(100)
 
         # Too many errors, e.g. could not connect to MQTT
         if errcount > 20:
             reset()
-
-        wdt.feed()
 
         count += 1
 
