@@ -18,6 +18,8 @@ class Luna:
 
     def read_avg_dist(self):
         dist = 0
+        min_dist = 80000
+        max_dist = 0
         j = 0
         for i in range(20):
             val = self.read_distance()
@@ -25,9 +27,13 @@ class Luna:
             if val > 0:
                 dist += val
                 j += 1
+                if min_dist > val:
+                    min_dist = val
+                if max_dist < val:
+                    max_dist = val
             time.sleep(0.25)
         dist = dist / j
-        return dist
+        return dist, min_dist, max_dist
 
     def read_amp(self):
         val = self.i2c.readfrom_mem(self.addr, 0x02, 2)

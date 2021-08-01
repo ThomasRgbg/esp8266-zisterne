@@ -101,12 +101,14 @@ def mainloop():
     errcount = 0
 
     while True:
-        dist = lidar.read_avg_dist()
+        dist, min_dist, max_dist = lidar.read_avg_dist()
         amp = lidar.read_amp()
         errorv = lidar.read_error()
         temp = lidar.read_temp()
         timestamp = rtc.datetime()
         print("Distance: {0}".format(dist))
+        print("Min Distance: {0}".format(min_dist))
+        print("Max Distance: {0}".format(max_dist))
         print("Amplification Value: {0}".format(amp))
         print("Error Value: {0}".format(errorv))
         print("Temperature: {0}".format(temp))
@@ -144,6 +146,8 @@ def mainloop():
             print("send to MQTT server")
             sc.mqtt.check_msg()
             sc.publish_generic('distance', dist)
+            sc.publish_generic('min_distance', min_dist)
+            sc.publish_generic('max_distance', max_dist)
             sc.publish_generic('pump', pumpe.state)
         else:
             print("MQTT not connected - try to reconnect")
