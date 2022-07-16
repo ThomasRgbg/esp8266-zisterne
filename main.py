@@ -70,10 +70,23 @@ def updatetime(force):
 ####
 
 # Pump on:
-upperthresh = 80.0
+upperthresh_default = 80.0 #was 80
+upperthresh = upperthresh_default
 
 # Pump off:
-lowerthresh = 87.0
+lowerthresh_default = 87.0 #was 87
+lowerthresh = lowerthresh_default
+
+def set_thres_offeset(value):
+    global lowerthresh
+    global upperthresh
+    lowerthresh = lowerthresh_default + int(value)
+    upperthresh = upperthresh_default + int(value)
+    print("new lowerthresh {0}".format(lowerthresh))
+    print("new upperthresh {0}".format(upperthresh))
+    
+# Zero level (Minimum the pump can take)
+zero_level = 240.0 
 
 ####
 # Main
@@ -89,6 +102,7 @@ lidar = Luna(i2c)
 
 sc = MQTTHandler(b'pentling/zisterne', '192.168.0.13')
 sc.register_action('pump_enable', pumpe.set_state)
+sc.register_action('waterlevel_offset', set_thres_offeset)
 
 rtc = RTC()
 wdt = Watchdog(interval = 120)
@@ -102,6 +116,10 @@ def mainloop():
 
     while True:
         dist, min_dist, max_dist = lidar.read_avg_dist()
+        waterlevel = zero_level - dist
+        waterlevel_target = zero_level - upperthresh
+        waterlevel_min = zero_level - max_dist
+        waterlevel_max = zero_level - min_dist
         amp = lidar.read_amp()
         errorv = lidar.read_error()
         temp = lidar.read_temp()
@@ -109,6 +127,10 @@ def mainloop():
         print("Distance: {0}".format(dist))
         print("Min Distance: {0}".format(min_dist))
         print("Max Distance: {0}".format(max_dist))
+        print("Level: {0}".format(waterlevel))
+        print("Min Level: {0}".format(waterlevel_min))
+        print("Max Level: {0}".format(waterlevel_max))
+        print("Target Level: {0}".format(waterlevel_target))
         print("Amplification Value: {0}".format(amp))
         print("Error Value: {0}".format(errorv))
         print("Temperature: {0}".format(temp))
@@ -148,6 +170,10 @@ def mainloop():
             sc.publish_generic('distance', dist)
             sc.publish_generic('min_distance', min_dist)
             sc.publish_generic('max_distance', max_dist)
+            sc.publish_generic('waterlevel', waterlevel)
+            sc.publish_generic('waterlevel_min', waterlevel_min)
+            sc.publish_generic('waterlevel_max', waterlevel_max)
+            sc.publish_generic('waterlevel_target', waterlevel_target)
             sc.publish_generic('pump', pumpe.state)
         else:
             print("MQTT not connected - try to reconnect")
