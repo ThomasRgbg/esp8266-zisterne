@@ -114,6 +114,10 @@ wdt.feed()
 
 # logfile = open('logfile.txt', 'w')
 
+wdt.feed()
+count = 1
+errcount = 0
+
 #####
 # Task definition
 #####
@@ -240,13 +244,14 @@ async def handle_lidar():
 
         # Get more data to MQTT to see whats ongoing if the pump is running
         if (pumpe.state == 1):
-            time.sleep(2)
+            await uasyncio.sleep_ms(2*1000)
+
         # Close to pump enable point, be carefull
         elif dist < lowerthresh:
-            time.sleep(20)
+            await uasyncio.sleep_ms(20*1000)
         # All good, lets take it slow. 
         else:
-            time.sleep(100)
+            await uasyncio.sleep_ms(100*1000)
 
         count += 1
         
