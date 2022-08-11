@@ -2,6 +2,10 @@ from machine import Pin, I2C, reset, RTC, unique_id, Timer
 import time
 import ntptime
 
+import uasyncio
+import gc
+import micropython
+
 from mqtt_handler import MQTTHandler
 
 from tfluna_i2c import Luna 
@@ -108,13 +112,73 @@ rtc = RTC()
 wdt = Watchdog(interval = 120)
 wdt.feed()
 
-logfile = open('logfile.txt', 'w')
+# logfile = open('logfile.txt', 'w')
 
-def mainloop():
+#####
+# Task definition
+#####
+
+
+async def housekeeping():
+    global errcount
     count = 1
-    errcount = 0
 
+    lasttimestamp = rtc.datetime()
     while True:
+        print("housekeeping()")
+        timestamp = rtc.datetime()
+        print("Timestamp: {0}".format(timestamp))
+        print("Count: {0}".format(count))
+        print("Error counter: {0}".format(errcount))
+        
+        wdt.feed()
+
+        # Too many errors, e.g. could not connect to MQTT
+        if errcount > 100:
+            time.sleep(5)
+            reset()
+
+        if not wlan.isconnected():
+            print("WLAN not connected")
+            errcount += 25
+            time.sleep(5)
+            continue
+        
+        if (count % 10 == 0):
+            updatetime(False)
+
+        if (count % 600 == 0):
+            updatetime(True)
+
+        gc.collect()
+        micropython.mem_info()
+
+        count += 1
+        await uasyncio.sleep_ms(60000)
+
+async def handle_mqtt():
+    global errcount
+    while True:
+        # Generic MQTT
+        if sc.isconnected():
+            print("handle_mqtt() - connected")
+            for i in range(59):
+                sc.mqtt.check_msg()
+                await uasyncio.sleep_ms(1000)
+            sc.publish_all()
+        else:
+            print("MQTT not connected - try to reconnect")
+            sc.connect()
+            errcount += 1
+            await uasyncio.sleep_ms(19000)
+
+        await uasyncio.sleep_ms(1000)
+
+async def handle_lidar():
+    global errcount
+    count = 1
+    while True:
+        print("handle_lidar()")
         dist, min_dist, max_dist = lidar.read_avg_dist()
         waterlevel = zero_level - dist
         waterlevel_target = zero_level - upperthresh
@@ -150,20 +214,18 @@ def mainloop():
             print("lowerthresh {0} < Dist: {1} < upperthresh {2} -> don't change anything".format(lowerthresh,dist,upperthresh))
 
         # On device logging for debugging
-        if (logfile and (count % 10 == 0)) or (pumpe.state == 1):
-            updatetime(False)
-            print("Write logfile")
-            logfile.write("{0}, ({1}),({2})\n".format(timestamp, dist,pumpe.state))
-            logfile.flush()
+#        if (logfile and (count % 10 == 0)) or (pumpe.state == 1):
+#            updatetime(False)
+#            print("Write logfile")
+#            logfile.write("{0}, ({1}),({2})\n".format(timestamp, dist,pumpe.state))
+#            logfile.flush()
         
         # After some hours, reallign things
         if (count % 100 == 0):
             # After some days, the TF Luna gets stuck with just one value
             print("periodic reset of Lidar")
             lidar.reset_sensor()
-            # Force time sync to avoid to large drift
-            updatetime(True) 
-
+ 
         if sc.isconnected():
             print("send to MQTT server")
             sc.mqtt.check_msg()
@@ -175,13 +237,6 @@ def mainloop():
             sc.publish_generic('waterlevel_max', waterlevel_max)
             sc.publish_generic('waterlevel_target', waterlevel_target)
             sc.publish_generic('pump', pumpe.state)
-        else:
-            print("MQTT not connected - try to reconnect")
-            sc.connect()
-            errcount += 1
-            continue
-
-        wdt.feed()
 
         # Get more data to MQTT to see whats ongoing if the pump is running
         if (pumpe.state == 1):
@@ -193,10 +248,24 @@ def mainloop():
         else:
             time.sleep(100)
 
-        # Too many errors, e.g. could not connect to MQTT
-        if errcount > 20:
-            reset()
-
         count += 1
+        
 
-mainloop()
+
+####
+# Main
+####
+
+updatetime(True)
+
+main_loop = uasyncio.get_event_loop()
+
+main_loop.create_task(housekeeping())
+main_loop.create_task(handle_mqtt())
+main_loop.create_task(handle_lidar())
+
+main_loop.run_forever()
+main_loop.close()
+
+
+#mainloop()
