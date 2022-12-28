@@ -32,7 +32,10 @@ class Luna:
                 if max_dist < val:
                     max_dist = val
             time.sleep(0.25)
-        dist = dist / j
+        if j == 0:
+            dist = None
+        else:
+            dist = dist / j
         return dist, min_dist, max_dist
 
     def read_amp(self):
