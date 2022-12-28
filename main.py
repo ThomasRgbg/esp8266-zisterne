@@ -182,8 +182,19 @@ async def handle_lidar():
     global errcount
     count = 1
     while True:
+        count += 1
         print("handle_lidar()")
         dist, min_dist, max_dist = lidar.read_avg_dist()
+        if not isinstance(dist, (float, int)):
+            print("No Measurement result")
+            amp = lidar.read_amp()
+            errorv = lidar.read_error()
+            print("Amplification Value: {0}".format(amp))
+            print("Error Value: {0}".format(errorv))
+            pumpe.off()
+            await uasyncio.sleep_ms(30*1000)
+            continue
+            
         waterlevel = zero_level - dist
         waterlevel_target = zero_level - upperthresh
         waterlevel_min = zero_level - max_dist
@@ -233,14 +244,15 @@ async def handle_lidar():
         if sc.isconnected():
             print("send to MQTT server")
             sc.mqtt.check_msg()
-            sc.publish_generic('distance', dist)
-            sc.publish_generic('min_distance', min_dist)
-            sc.publish_generic('max_distance', max_dist)
-            sc.publish_generic('waterlevel', waterlevel)
-            sc.publish_generic('waterlevel_min', waterlevel_min)
-            sc.publish_generic('waterlevel_max', waterlevel_max)
-            sc.publish_generic('waterlevel_target', waterlevel_target)
-            sc.publish_generic('pump', pumpe.state)
+            if isinstance(dist, (float, int)):
+                sc.publish_generic('distance', dist)
+                sc.publish_generic('min_distance', min_dist)
+                sc.publish_generic('max_distance', max_dist)
+                sc.publish_generic('waterlevel', waterlevel)
+                sc.publish_generic('waterlevel_min', waterlevel_min)
+                sc.publish_generic('waterlevel_max', waterlevel_max)
+                sc.publish_generic('waterlevel_target', waterlevel_target)
+                sc.publish_generic('pump', pumpe.state)
 
         # Get more data to MQTT to see whats ongoing if the pump is running
         if (pumpe.state == 1):
@@ -253,7 +265,6 @@ async def handle_lidar():
         else:
             await uasyncio.sleep_ms(100*1000)
 
-        count += 1
         
 
 
